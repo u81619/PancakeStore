@@ -1,3 +1,4 @@
+![Artboard](https://github.com/jailbreakdotparty/PancakeStore/blob/main/previewIcon.png)
 # PancakeStore
 **MuffinStore Jailed, but with a proper UI. iOS 16.4 and later.**
 
