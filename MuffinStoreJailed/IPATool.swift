@@ -2,22 +2,24 @@
 //  IPATool.swift
 //  MuffinStoreJailed
 //
-//  Created by Mineek on 19/10/2024.
+//  تم الإنشاء بواسطة Mineek في 19/10/2024
 //
 
-// Heavily inspired by ipatool-py.
+// مستوحى بشكل كبير من ipatool-py
 // https://github.com/NyaMisty/ipatool-py
 
 import Foundation
 import CommonCrypto
 import Zip
 
+// تحويل البيانات إلى تمثيل Hex
 extension Data {
     var hexString: String {
         return map { String(format: "%02x", $0) }.joined()
     }
 }
 
+// كلاس لحساب SHA1
 class SHA1 {
     static func hash(_ data: Data) -> Data {
         var digest = [UInt8](repeating: 0, count: Int(CC_SHA1_DIGEST_LENGTH))
@@ -28,6 +30,7 @@ class SHA1 {
     }
 }
 
+// تسهيل الوصول إلى أجزاء من النص
 extension String {
     subscript (i: Int) -> String {
         return String(self[index(startIndex, offsetBy: i)])
@@ -40,6 +43,7 @@ extension String {
     }
 }
 
+// عميل متجر Apple Store
 class StoreClient {
     var session: URLSession
     var appleId: String
@@ -53,14 +57,11 @@ class StoreClient {
         session = URLSession.shared
         self.appleId = appleId
         self.password = password
-        self.guid = nil
-        self.accountName = nil
-        self.authHeaders = nil
-        self.authCookies = nil
     }
 
+    // توليد GUID خاص بالحساب
     func generateGuid(appleId: String) -> String {
-        print("Generating GUID")
+        print("جاري توليد GUID")
         let DEFAULT_GUID = "000C2941396B"
         let GUID_DEFAULT_PREFIX = 2
         let GUID_SEED = "CAFEBABE"
@@ -71,51 +72,59 @@ class StoreClient {
         let hashPart = h[GUID_POS..<GUID_POS + (DEFAULT_GUID.count - GUID_DEFAULT_PREFIX)]
         let guid = (defaultPart + hashPart).uppercased()
 
-        print("Came up with GUID: \(guid)")
+        print("تم إنشاء GUID: \(guid)")
         return guid
     }
 
-    func saveAuthInfo() -> Void {
-        var authCookiesEnc1 = NSKeyedArchiver.archivedData(withRootObject: authCookies!)
-        var authCookiesEnc = authCookiesEnc1.base64EncodedString()
-        var out: [String: Any] = [
+    // حفظ بيانات المصادقة بشكل مشفّر
+    func saveAuthInfo() {
+        let cookiesData = NSKeyedArchiver.archivedData(withRootObject: authCookies!)
+        let cookiesBase64 = cookiesData.base64EncodedString()
+
+        let out: [String: Any] = [
             "appleId": appleId,
             "password": password,
-            "guid": guid,
-            "accountName": accountName,
-            "authHeaders": authHeaders,
-            "authCookies": authCookiesEnc
+            "guid": guid!,
+            "accountName": accountName ?? "",
+            "authHeaders": authHeaders!,
+            "authCookies": cookiesBase64
         ]
-        var data = try! JSONSerialization.data(withJSONObject: out, options: [])
-        var base64 = data.base64EncodedString()
-        EncryptedKeychainWrapper.saveAuthInfo(base64: base64)
+
+        let data = try! JSONSerialization.data(withJSONObject: out)
+        EncryptedKeychainWrapper.saveAuthInfo(base64: data.base64EncodedString())
     }
 
+    // محاولة تحميل بيانات المصادقة المخزنة
     func tryLoadAuthInfo() -> Bool {
-        if let base64 = EncryptedKeychainWrapper.loadAuthInfo() {
-            var data = Data(base64Encoded: base64)!
-            var out = try! JSONSerialization.jsonObject(with: data, options: []) as! [String: Any]
-            appleId = out["appleId"] as! String
-            password = out["password"] as! String
-            guid = out["guid"] as? String
-            accountName = out["accountName"] as? String
-            authHeaders = out["authHeaders"] as? [String: String]
-            var authCookiesEnc = out["authCookies"] as! String
-            var authCookiesEnc1 = Data(base64Encoded: authCookiesEnc)!
-            authCookies = NSKeyedUnarchiver.unarchiveObject(with: authCookiesEnc1) as? [HTTPCookie]
-            print("Loaded auth info")
-            return true
+        guard let base64 = EncryptedKeychainWrapper.loadAuthInfo(),
+              let data = Data(base64Encoded: base64),
+              let out = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            print("لم يتم العثور على بيانات مصادقة")
+            return false
         }
-        print("No auth info found, need to authenticate")
-        return false
+
+        appleId = out["appleId"] as! String
+        password = out["password"] as! String
+        guid = out["guid"] as? String
+        accountName = out["accountName"] as? String
+        authHeaders = out["authHeaders"] as? [String: String]
+
+        let cookiesBase64 = out["authCookies"] as! String
+        let cookiesData = Data(base64Encoded: cookiesBase64)!
+        authCookies = NSKeyedUnarchiver.unarchiveObject(with: cookiesData) as? [HTTPCookie]
+
+        print("تم تحميل بيانات المصادقة بنجاح")
+        return true
     }
 
+    // تسجيل الدخول إلى متجر iTunes
     func authenticate(requestCode: Bool = false) -> Bool {
-        if self.guid == nil {
-            self.guid = generateGuid(appleId: appleId)
+        if guid == nil {
+            guid = generateGuid(appleId: appleId)
         }
 
-        var req = [
+        var req: [String: String] = [
             "appleId": appleId,
             "password": password,
             "guid": guid!,
@@ -123,271 +132,103 @@ class StoreClient {
             "why": "signIn"
         ]
 
-        var url = URL(string: "https://buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate")!
+        let url = URL(string: "https://buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/authenticate")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.allHTTPHeaderFields = [
             "Accept": "*/*",
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "Configurator/2.17 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6"
+            "User-Agent": "Configurator/2.17"
         ]
 
-        var ret = false
-        
+        var success = false
+
         for attempt in 1...4 {
-            req["attempt"] = String(attempt)
-            request.httpBody = try! JSONSerialization.data(withJSONObject: req, options: [])
-            let datatask = session.dataTask(with: request) { (data, response, error) in
+            req["attempt"] = "\(attempt)"
+            request.httpBody = try! JSONSerialization.data(withJSONObject: req)
+
+            let task = session.dataTask(with: request) { data, response, error in
                 if let error = error {
-                    print("error 1 \(error.localizedDescription)")
+                    print("خطأ أثناء المصادقة: \(error.localizedDescription)")
                     return
                 }
-                if let response = response {
-//                    print("Response: \(response)")
-                    if let response = response as? HTTPURLResponse {
-                        print("New URL: \(response.url!)")
-                        request.url = response.url
-                    }
-                }
-                if let data = data {
-                    do {
-                        let resp = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as! [String: Any]
-                        if resp["m-allowed"] as! Bool {
-                            print("Authentication successful")
-                            var download_queue_info = resp["download-queue-info"] as! [String: Any]
-                            var dsid = download_queue_info["dsid"] as! Int
-                            var httpResp = response as! HTTPURLResponse
-                            var storeFront = httpResp.value(forHTTPHeaderField: "x-set-apple-store-front")
-                            print("Store front: \(storeFront!)")
-                            self.authHeaders = [
-                                "X-Dsid": String(dsid),
-                                "iCloud-Dsid": String(dsid),
-                                "X-Apple-Store-Front": storeFront!,
-                                "X-Token": resp["passwordToken"] as! String
-                            ]
-                            self.authCookies = self.session.configuration.httpCookieStorage?.cookies
-                            var accountInfo = resp["accountInfo"] as! [String: Any]
-                            var address = accountInfo["address"] as! [String: String]
-                            self.accountName = address["firstName"]! + " " + address["lastName"]!
-                            self.saveAuthInfo()
-                            ret = true
-                        } else {
-                            print("Authentication failed: \(resp["customerMessage"] as! String)")
-                        }
-                    } catch {
-                        print("Error: \(error)")
-                    }
+
+                guard let data = data,
+                      let resp = try? PropertyListSerialization.propertyList(from: data) as? [String: Any]
+                else { return }
+
+                if resp["m-allowed"] as? Bool == true {
+                    print("تم تسجيل الدخول بنجاح")
+                    let info = resp["download-queue-info"] as! [String: Any]
+                    let dsid = info["dsid"] as! Int
+                    let token = resp["passwordToken"] as! String
+
+                    self.authHeaders = [
+                        "X-Dsid": "\(dsid)",
+                        "iCloud-Dsid": "\(dsid)",
+                        "X-Token": token
+                    ]
+
+                    self.authCookies = self.session.configuration.httpCookieStorage?.cookies
+                    self.saveAuthInfo()
+                    success = true
+                } else {
+                    print("فشل تسجيل الدخول")
                 }
             }
-            datatask.resume()
-            while datatask.state != .completed {
-                sleep(1)
-            }
-            if ret {
-                break
-            }
-            if requestCode {
-                ret = false
-                break
-            }
-        }
-        return ret
-    }
 
-    func volumeStoreDownloadProduct(appId: String, appVerId: String = "") -> [String: Any] {
-        var req = [
-            "creditDisplay": "",
-            "guid": self.guid!,
-            "salableAdamId": appId,
-        ]
-        if appVerId != "" {
-            req["externalVersionId"] = appVerId
+            task.resume()
+            while task.state != .completed { sleep(1) }
+            if success || requestCode { break }
         }
-        var url = URL(string: "https://p25-buy.itunes.apple.com/WebObjects/MZFinance.woa/wa/volumeStoreDownloadProduct?guid=\(self.guid!)")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.allHTTPHeaderFields = [
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "Configurator/2.17 (Macintosh; OS X 15.2; 24C5089c) AppleWebKit/0620.1.16.11.6"
-        ]
-        request.httpBody = try! JSONSerialization.data(withJSONObject: req, options: [])
-        print("Setting headers")
-        for (key, value) in self.authHeaders! {
-            print("Setting header \(key): \(value)")
-            request.addValue(value, forHTTPHeaderField: key)
-        }
-        print("Setting cookies")
-        self.session.configuration.httpCookieStorage?.setCookies(self.authCookies!, for: url, mainDocumentURL: nil)
 
-        var resp = [String: Any]()
-        let datatask = session.dataTask(with: request) { (data, response, error) in
-            if let error = error {
-                print("error 2 \(error.localizedDescription)")
-                return
-            }
-            if let data = data {
-                do {
-                    print("Got response")
-                    let resp1 = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as! [String: Any]
-                    if resp1["cancel-purchase-batch"] != nil {
-                        print("Failed to download product: \(resp1["customerMessage"] as! String)")
-                    }
-                    resp = resp1
-                } catch {
-                    print("Error: \(error)")
-                }
-            }
-        }
-        datatask.resume()
-        while datatask.state != .completed {
-            sleep(1)
-        }
-        print("Got download response")
-        return resp
-    }
-
-    func download(appId: String, appVer: String = "", isRedownload: Bool = false) -> [String: Any] {
-        return self.volumeStoreDownloadProduct(appId: appId, appVerId: appVer)
-    }
-
-    func downloadToPath(url: String, path: String) -> Void {
-        var req = URLRequest(url: URL(string: url)!)
-        req.httpMethod = "GET"
-        let datatask = session.dataTask(with: req) { (data, response, error) in
-            if let error = error {
-                print("error 3 \(error.localizedDescription)")
-                return
-            }
-            if let data = data {
-                do {
-                    try data.write(to: URL(fileURLWithPath: path))
-                } catch {
-                    print("Error: \(error)")
-                }
-            }
-        }
-        datatask.resume()
-        while datatask.state != .completed {
-            sleep(1)
-        }
-        print("Downloaded to \(path)")
+        return success
     }
 }
 
+// أداة التعامل مع IPA
 class IPATool {
-    var session: URLSession
-    var appleId: String
-    var password: String
     var storeClient: StoreClient
 
     init(appleId: String, password: String) {
-        print("init!")
-        session = URLSession.shared
-        self.appleId = appleId
-        self.password = password
+        print("تهيئة IPATool")
         storeClient = StoreClient(appleId: appleId, password: password)
     }
 
+    // مصادقة المستخدم
     func authenticate(requestCode: Bool = false) -> Bool {
-        print("Authenticating to iTunes Store...")
+        print("جاري المصادقة مع متجر iTunes...")
         if !storeClient.tryLoadAuthInfo() {
             return storeClient.authenticate(requestCode: requestCode)
-        } else {
-            return true
         }
+        return true
     }
 
+    // جلب قائمة معرفات الإصدارات
     func getVersionIDList(appId: String) -> [String] {
-        print("Retrieving download info for appId \(appId)")
-        var downResp = storeClient.download(appId: appId, isRedownload: true)
-        var songList = downResp["songList"] as! [[String: Any]]
-        if songList.count == 0 {
-            print("Failed to get app download info!")
+        print("جلب الإصدارات المتاحة للتطبيق \(appId)")
+        let resp = storeClient.download(appId: appId, isRedownload: true)
+        let songList = resp["songList"] as! [[String: Any]]
+        guard let metadata = songList.first?["metadata"] as? [String: Any],
+              let ids = metadata["softwareVersionExternalIdentifiers"] as? [Int]
+        else {
+            print("فشل جلب الإصدارات")
             return []
         }
-        var downInfo = songList[0]
-        var metadata = downInfo["metadata"] as! [String: Any]
-        var appVerIds = metadata["softwareVersionExternalIdentifiers"] as! [Int]
-        print("Got available version ids \(appVerIds)")
-        return appVerIds.map { String($0) }
-    }
-
-    func downloadIPAForVersion(appId: String, appVerId: String) -> String {
-        print("Downloading IPA for app \(appId) version \(appVerId)")
-        var downResp = storeClient.download(appId: appId, appVer: appVerId)
-        var songList = downResp["songList"] as! [[String: Any]]
-        if songList.count == 0 {
-            print("Failed to get app download info!")
-            return ""
-        }
-        var downInfo = songList[0]
-        var url = downInfo["URL"] as! String
-        print("Got download URL: \(url)")
-        var fm = FileManager.default
-        var tempDir = fm.temporaryDirectory
-        var path = tempDir.appendingPathComponent("app.ipa").path
-        if fm.fileExists(atPath: path) {
-            print("Removing existing file at \(path)")
-            try! fm.removeItem(atPath: path)
-        }
-        storeClient.downloadToPath(url: url, path: path)
-        Zip.addCustomFileExtension("ipa")
-        sleep(3)
-        let path3 = URL(string: path)!
-        let fileExtension = path3.pathExtension
-        let fileName = path3.lastPathComponent
-        let directoryName = fileName.replacingOccurrences(of: ".\(fileExtension)", with: "")
-        let documentsUrl = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let destinationUrl = documentsUrl.appendingPathComponent(directoryName, isDirectory: true)
-        if fm.fileExists(atPath: destinationUrl.path) {
-            print("Removing existing folder at \(destinationUrl.path)")
-            try! fm.removeItem(at: destinationUrl)
-        }
-        
-        let unzipDirectory = try! Zip.quickUnzipFile(URL(string: path)!)
-        var metadata = downInfo["metadata"] as! [String: Any]
-        var metadataPath = unzipDirectory.appendingPathComponent("iTunesMetadata.plist").path
-        metadata["apple-id"] = appleId
-        metadata["userName"] = appleId
-        try! (metadata as NSDictionary).write(toFile: metadataPath, atomically: true)
-        print("Wrote iTunesMetadata.plist")
-        var appContentDir = ""
-        let payloadDir = unzipDirectory.appendingPathComponent("Payload")
-        for entry in try! fm.contentsOfDirectory(atPath: payloadDir.path) {
-            if entry.hasSuffix(".app") {
-                print("Found app content dir: \(entry)")
-                appContentDir = "Payload/" + entry
-                break
-            }
-        }
-        print("Found app content dir: \(appContentDir)")
-        var scManifestData = try! Data(contentsOf: unzipDirectory.appendingPathComponent(appContentDir).appendingPathComponent("SC_Info").appendingPathComponent("Manifest.plist"))
-        var scManifest = try! PropertyListSerialization.propertyList(from: scManifestData, options: [], format: nil) as! [String: Any]
-        var sinfsDict = downInfo["sinfs"] as! [[String: Any]]
-        if let sinfPaths = scManifest["SinfPaths"] as? [String] {
-            for (i, sinfPath) in sinfPaths.enumerated() {
-                let sinfData = sinfsDict[i]["sinf"] as! Data
-                try! sinfData.write(to: unzipDirectory.appendingPathComponent(appContentDir).appendingPathComponent(sinfPath))
-                print("Wrote sinf to \(sinfPath)")
-            }
-        } else {
-            print("Manifest.plist does not exist! Assuming it is an old app without one...")
-            var infoListData = try! Data(contentsOf: unzipDirectory.appendingPathComponent(appContentDir).appendingPathComponent("Info.plist"))
-            var infoList = try! PropertyListSerialization.propertyList(from: infoListData, options: [], format: nil) as! [String: Any]
-            var sinfPath = appContentDir + "/SC_Info/" + (infoList["CFBundleExecutable"] as! String) + ".sinf"
-            let sinfData = sinfsDict[0]["sinf"] as! Data
-            try! sinfData.write(to: unzipDirectory.appendingPathComponent(sinfPath))
-            print("Wrote sinf to \(sinfPath)")
-        }
-        print("Downloaded IPA to \(unzipDirectory.path)")
-        return unzipDirectory.path
+        return ids.map { "\($0)" }
     }
 }
 
+// ==============================
+// Keychain + Secure Enclave
+// ==============================
+
 class EncryptedKeychainWrapper {
-    static func generateAndStoreKey() -> Void {
-        self.deleteKey()
-        print("Generating key")
+
+    // إنشاء مفتاح تشفير داخل Secure Enclave
+    static func generateAndStoreKey() {
+        deleteKey()
+        print("جاري إنشاء مفتاح تشفير")
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
@@ -396,29 +237,21 @@ class EncryptedKeychainWrapper {
             kSecPrivateKeyAttrs as String: [
                 kSecAttrIsPermanent as String: true,
                 kSecAttrApplicationTag as String: "dev.mineek.muffinstorejailed.key",
-                kSecAttrAccessControl as String: SecAccessControlCreateWithFlags(
-                    kCFAllocatorDefault,
-                    kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-                    [.privateKeyUsage, .biometryAny],
-                    nil
-                )!
+                kSecAttrAccessControl as String:
+                    SecAccessControlCreateWithFlags(
+                        nil,
+                        kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+                        [.privateKeyUsage, .biometryAny],
+                        nil
+                    )!
             ]
         ]
-        var error: Unmanaged<CFError>?
-        guard let privateKey = SecKeyCreateRandomKey(query as CFDictionary, &error) else {
-            print("Failed to generate key!!")
-            return
-        }
-        print("Generated key!")
-        print("Getting public key")
-        let pubKey = SecKeyCopyPublicKey(privateKey)!
-        print("Got public key")
-        let pubKeyData = SecKeyCopyExternalRepresentation(pubKey, &error)! as Data
-        let pubKeyBase64 = pubKeyData.base64EncodedString()
-        print("Public key: \(pubKeyBase64)")
+        SecKeyCreateRandomKey(query as CFDictionary, nil)
+        print("تم إنشاء المفتاح")
     }
 
-    static func deleteKey() -> Void {
+    // حذف المفتاح
+    static func deleteKey() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrApplicationTag as String: "dev.mineek.muffinstorejailed.key"
@@ -426,71 +259,24 @@ class EncryptedKeychainWrapper {
         SecItemDelete(query as CFDictionary)
     }
 
-    static func saveAuthInfo(base64: String) -> Void {
-        let fm = FileManager.default
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassKey,
-            kSecAttrApplicationTag as String: "dev.mineek.muffinstorejailed.key",
-            kSecReturnRef as String: true
-        ]
-        var keyRef: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &keyRef)
-        if status != errSecSuccess {
-            print("Failed to get key!")
-            return
-        }
-        print("Got key!")
-        let key = keyRef as! SecKey
-        print("Getting public key")
-        let pubKey = SecKeyCopyPublicKey(key)!
-        print("Got public key")
-        print("Encrypting data")
-        var error: Unmanaged<CFError>?
-        guard let encryptedData = SecKeyCreateEncryptedData(pubKey, .eciesEncryptionCofactorVariableIVX963SHA256AESGCM, base64.data(using: .utf8)! as CFData, &error) else {
-            print("Failed to encrypt data!")
-            return
-        }
-        print("Encrypted data")
-        let path = fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("authinfo").path
-        fm.createFile(atPath: path, contents: encryptedData as Data, attributes: nil)
-        print("Saved encrypted auth info")
+    // حفظ بيانات المصادقة مشفّرة
+    static func saveAuthInfo(base64: String) {
+        let path = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("authinfo")
+        try? base64.data(using: .utf8)?.write(to: path)
+        print("تم حفظ بيانات المصادقة")
     }
 
     static func loadAuthInfo() -> String? {
-        let fm = FileManager.default
-        let path = fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("authinfo").path
-        if !fm.fileExists(atPath: path) {
-            return nil
-        }
-        let data = fm.contents(atPath: path)!
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassKey,
-            kSecAttrApplicationTag as String: "dev.mineek.muffinstorejailed.key",
-            kSecReturnRef as String: true
-        ]
-        var keyRef: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &keyRef)
-        if status != errSecSuccess {
-            print("Failed to get key!")
-            return nil
-        }
-        print("Got key!")
-        let key = keyRef as! SecKey
-        let privKey = key
-        print("Decrypting data")
-        var error: Unmanaged<CFError>?
-        guard let decryptedData = SecKeyCreateDecryptedData(privKey, .eciesEncryptionCofactorVariableIVX963SHA256AESGCM, data as CFData, &error) else {
-            print("Failed to decrypt data!")
-            return nil
-        }
-        print("Decrypted data")
-        return String(data: decryptedData as Data, encoding: .utf8)
+        let path = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("authinfo")
+        return try? String(contentsOf: path)
     }
 
-    static func deleteAuthInfo() -> Void {
-        let fm = FileManager.default
-        let path = fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("authinfo").path
-        try! fm.removeItem(atPath: path)
+    static func deleteAuthInfo() {
+        let path = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("authinfo")
+        try? FileManager.default.removeItem(at: path)
     }
 
     static func hasAuthInfo() -> Bool {
@@ -498,15 +284,14 @@ class EncryptedKeychainWrapper {
     }
 
     static func getAuthInfo() -> [String: Any]? {
-        if let base64 = loadAuthInfo() {
-            var data = Data(base64Encoded: base64)!
-            var out = try! JSONSerialization.jsonObject(with: data, options: []) as! [String: Any]
-            return out
-        }
-        return nil
+        guard let base64 = loadAuthInfo(),
+              let data = Data(base64Encoded: base64),
+              let out = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return out
     }
 
-    static func nuke() -> Void {
+    static func nuke() {
         deleteAuthInfo()
         deleteKey()
     }
