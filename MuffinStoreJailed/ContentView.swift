@@ -2,59 +2,72 @@
 //  ContentView.swift
 //  MuffinStoreJailed
 //
-//  Created by Mineek on 26/12/2024.
+//  تم الإنشاء بواسطة Mineek في 26/12/2024
 //
 
 import SwiftUI
 
 struct ContentView: View {
+    // أداة التعامل مع ملفات IPA
     @State var ipaTool: IPATool?
     
+    // بيانات تسجيل الدخول
     @State var appleId: String = ""
     @State var password: String = ""
     @State var code: String = ""
     
+    // حالات التطبيق
     @State var isAuthenticated: Bool = false
     @State var isDowngrading: Bool = false
     
+    // رابط التطبيق من App Store
     @State var appLink: String = ""
     
+    // حالات الواجهة
     @State var hasSent2FACode: Bool = false
     @State var showLogs: Bool = false
     @State var showPassword: Bool = false
     
+    // بيانات مشتركة
     @ObservedObject var sharedData = SharedData.shared
     
     var body: some View {
         NavigationStack {
             List {
+                // عرض السجلات
                 if showLogs {
-                    Section(header: LabelStyle(text: "Logs", icon: "terminal")) {
+                    Section(header: LabelStyle(text: "السجلات", icon: "terminal")) {
                         GlassyTerminal {
                             LogView()
                         }
                     }
                 }
-                // login page view
+                
+                // واجهة تسجيل الدخول
                 if !isAuthenticated {
-                    Section(header: HeaderStyle(text: "Apple ID", icon: "icloud"), footer: Text("Created by [mineek](https://github.com/mineek/MuffinStoreJailed-Public), UI modifications done by lunginspector for [jailbreak.party](https://github.com/jailbreakdotparty). Use this tool at your own risk! App data may be lost, and other damage could occur.")) {
+                    Section(
+                        header: HeaderStyle(text: "Apple ID", icon: "icloud"),
+                        footer: Text("تم الإنشاء بواسطة mineek، تعديلات الواجهة بواسطة lunginspector لصالح jailbreak.party. استخدم هذه الأداة على مسؤوليتك الخاصة! قد يتم فقدان بيانات التطبيقات أو حدوث أضرار أخرى.")
+                    ) {
                         VStack {
-                            TextField("Email Address", text: $appleId)
+                            TextField("البريد الإلكتروني", text: $appleId)
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
                                 .textFieldStyle(GlassyTextFieldStyle(isDisabled: hasSent2FACode))
+                            
                             HStack {
                                 if showPassword {
-                                    TextField("Password", text: $password)
+                                    TextField("كلمة المرور", text: $password)
                                         .autocapitalization(.none)
                                         .disableAutocorrection(true)
                                         .textFieldStyle(GlassyTextFieldStyle(isDisabled: hasSent2FACode))
                                 } else {
-                                    SecureField("Password", text: $password)
+                                    SecureField("كلمة المرور", text: $password)
                                         .autocapitalization(.none)
                                         .disableAutocorrection(true)
                                         .textFieldStyle(GlassyTextFieldStyle(isDisabled: hasSent2FACode))
                                 }
+                                
                                 Button(action: {
                                     showPassword.toggle()
                                 }) {
@@ -66,36 +79,45 @@ struct ContentView: View {
                             }
                         }
                     }
+                    
+                    // إدخال رمز التحقق الثنائي
                     if hasSent2FACode {
-                        Section(header: HeaderStyle(text: "2FA Code", icon: "key"), footer: Text("If you did not receive a notification on any of the devices that are trusted to receive verification codes, type in six random numbers into the field. Trust me.")) {
-                            TextField("2FA Code", text: $code)
+                        Section(
+                            header: HeaderStyle(text: "رمز التحقق (2FA)", icon: "key"),
+                            footer: Text("إذا لم يصلك إشعار على أي جهاز موثوق، أدخل أي ستة أرقام عشوائية. صدقني 😄")
+                        ) {
+                            TextField("رمز التحقق", text: $code)
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
                                 .textFieldStyle(GlassyTextFieldStyle())
                         }
                     }
                 } else {
-                    // downgrading application view
+                    // واجهة تنزيل النسخة الأقدم
                     if isDowngrading {
                         Section {
                             HStack(spacing: 12) {
                                 ProgressView()
                                 VStack(alignment: .leading) {
-                                    Text("Downgrading Application...")
+                                    Text("جاري تنزيل نسخة أقدم من التطبيق...")
                                         .fontWeight(.medium)
-                                    Text("This may take a while, and PancakeStore will likely hang for a bit.")
+                                    Text("قد تستغرق العملية بعض الوقت، وقد يتجمد PancakeStore مؤقتًا.")
                                         .font(.footnote)
                                 }
                             }
                         }
                     } else {
-                        // input the stupid app link or whatever view
-                        Section(header: HeaderStyle(text: "Downgrade App", icon: "arrow.down.app"), footer: Text("Created by [mineek](https://github.com/mineek/MuffinStoreJailed-Public), UI modifications done by lunginspector for [jailbreak.party](https://github.com/jailbreakdotparty). Use this tool at your own risk! App data may be lost, and other damage could occur.")) {
+                        // إدخال رابط التطبيق
+                        Section(
+                            header: HeaderStyle(text: "تنزيل إصدار أقدم", icon: "arrow.down.app"),
+                            footer: Text("تم الإنشاء بواسطة mineek، تعديلات الواجهة بواسطة lunginspector. استخدم الأداة على مسؤوليتك.")
+                        ) {
                             HStack {
-                                TextField("Link to App Store App", text: $appLink)
+                                TextField("رابط التطبيق من App Store", text: $appLink)
                                     .autocapitalization(.none)
                                     .disableAutocorrection(true)
                                     .textFieldStyle(GlassyTextFieldStyle())
+                                
                                 Button(action: {
                                     Haptic.shared.play(.soft)
                                     appLink = UIPasteboard.general.string ?? ""
@@ -112,13 +134,16 @@ struct ContentView: View {
             .navigationTitle("PancakeStore")
             .safeAreaInset(edge: .bottom) {
                 VStack {
-                    // i hate this.
+                    // أزرار التحكم السفلية
                     if !isAuthenticated {
                         Button(action: {
                             Haptic.shared.play(.soft)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                                 if appleId.isEmpty || password.isEmpty {
-                                    Alertinator.shared.alert(title: "No Apple ID details were input!", body: "Please type your Apple ID email address & password, then try again.")
+                                    Alertinator.shared.alert(
+                                        title: "بيانات Apple ID ناقصة",
+                                        body: "يرجى إدخال البريد الإلكتروني وكلمة المرور ثم المحاولة مرة أخرى."
+                                    )
                                 }
                                 if code.isEmpty {
                                     ipaTool = IPATool(appleId: appleId, password: password)
@@ -133,12 +158,15 @@ struct ContentView: View {
                             }
                         }) {
                             if hasSent2FACode {
-                                LabelStyle(text: "Log In", icon: "arrow.right")
+                                LabelStyle(text: "تسجيل الدخول", icon: "arrow.right")
                             } else {
-                                LabelStyle(text: "Send 2FA Code", icon: "key")
+                                LabelStyle(text: "إرسال رمز التحقق", icon: "key")
                             }
                         }
-                        .buttonStyle(GlassyButtonStyle(isDisabled: hasSent2FACode ? code.isEmpty : false, isMaterialButton: true))
+                        .buttonStyle(GlassyButtonStyle(
+                            isDisabled: hasSent2FACode ? code.isEmpty : false,
+                            isMaterialButton: true
+                        ))
                     } else {
                         if isDowngrading {
                             Button(action: {
@@ -147,30 +175,38 @@ struct ContentView: View {
                                     exitinator()
                                 }
                             }) {
-                                LabelStyle(text: "Go to Home Screen", icon: "house")
+                                LabelStyle(text: "الذهاب إلى الشاشة الرئيسية", icon: "house")
                             }
-                            .buttonStyle(GlassyButtonStyle(isDisabled: !sharedData.hasAppBeenServed, isMaterialButton: true))
+                            .buttonStyle(GlassyButtonStyle(
+                                isDisabled: !sharedData.hasAppBeenServed,
+                                isMaterialButton: true
+                            ))
                         } else {
                             Button(action: {
                                 Haptic.shared.play(.soft)
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                    if appLink.isEmpty {
-                                        return
-                                    }
+                                    if appLink.isEmpty { return }
+                                    
                                     var appLinkParsed = appLink
                                     appLinkParsed = appLinkParsed.components(separatedBy: "id").last ?? ""
+                                    
                                     for char in appLinkParsed {
                                         if !char.isNumber {
-                                            appLinkParsed = String(appLinkParsed.prefix(upTo: appLinkParsed.firstIndex(of: char)!))
+                                            appLinkParsed = String(
+                                                appLinkParsed.prefix(
+                                                    upTo: appLinkParsed.firstIndex(of: char)!
+                                                )
+                                            )
                                             break
                                         }
                                     }
-                                    print("App ID: \(appLinkParsed)")
+                                    
+                                    print("معرّف التطبيق: \(appLinkParsed)")
                                     isDowngrading = true
                                     downgradeApp(appId: appLinkParsed, ipaTool: ipaTool!)
                                 }
                             }) {
-                                LabelStyle(text: "Downgrade App", icon: "arrow.down")
+                                LabelStyle(text: "تنزيل إصدار أقدم", icon: "arrow.down")
                             }
                             .buttonStyle(GlassyButtonStyle(isMaterialButton: true))
                             
@@ -184,7 +220,7 @@ struct ContentView: View {
                                     exitinator()
                                 }
                             }) {
-                                LabelStyle(text: "Log Out & Exit", icon: "xmark")
+                                LabelStyle(text: "تسجيل الخروج والخروج من التطبيق", icon: "xmark")
                             }
                             .buttonStyle(GlassyButtonStyle(color: .red, isMaterialButton: true))
                         }
@@ -192,7 +228,12 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 25)
                 .padding(.top, 30)
-                .background(VariableBlurView(maxBlurRadius: 5, direction: .blurredBottomClearTop).ignoresSafeArea())
+                .background(
+                    VariableBlurView(
+                        maxBlurRadius: 5,
+                        direction: .blurredBottomClearTop
+                    ).ignoresSafeArea()
+                )
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -206,22 +247,24 @@ struct ContentView: View {
             }
             .onAppear {
                 isAuthenticated = EncryptedKeychainWrapper.hasAuthInfo()
-                print("Found \(isAuthenticated ? "auth" : "no auth") info in keychain")
+                print("تم العثور على \(isAuthenticated ? "بيانات مصادقة" : "لا توجد بيانات مصادقة") في Keychain")
+                
                 if isAuthenticated {
                     guard let authInfo = EncryptedKeychainWrapper.getAuthInfo() else {
-                        print("Failed to get auth info from keychain, logging out")
+                        print("فشل جلب بيانات المصادقة، سيتم تسجيل الخروج")
                         isAuthenticated = false
                         EncryptedKeychainWrapper.nuke()
                         EncryptedKeychainWrapper.generateAndStoreKey()
                         return
                     }
-                    appleId = authInfo["appleId"]! as! String
-                    password = authInfo["password"]! as! String
+                    
+                    appleId = authInfo["appleId"] as! String
+                    password = authInfo["password"] as! String
                     ipaTool = IPATool(appleId: appleId, password: password)
                     let ret = ipaTool?.authenticate()
-                    print("Re-authenticated \(ret! ? "successfully" : "unsuccessfully")")
+                    print("إعادة المصادقة \(ret! ? "نجحت" : "فشلت")")
                 } else {
-                    print("No auth info found in keychain, setting up by generating a key in SEP")
+                    print("لا توجد بيانات مصادقة، يتم إنشاء مفتاح جديد في SEP")
                     EncryptedKeychainWrapper.generateAndStoreKey()
                 }
             }
